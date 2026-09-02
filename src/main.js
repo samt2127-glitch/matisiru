@@ -184,11 +184,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let likedSpotIds = JSON.parse(localStorage.getItem('ojiya_liked_spots')) || [];
 
     function saveSpotsToStorage() {
-        localStorage.setItem('ojiya_photo_spots', JSON.stringify(spots));
+        try {
+            localStorage.setItem('ojiya_photo_spots', JSON.stringify(spots));
+        } catch (e) {
+            console.error('LocalStorage保存エラー:', e);
+            alert('写真データの保存容量を超えたため保存できませんでした。');
+        }
     }
 
     function saveLikedSpotsToStorage() {
-        localStorage.setItem('ojiya_liked_spots', JSON.stringify(likedSpotIds));
+        try {
+            localStorage.setItem('ojiya_liked_spots', JSON.stringify(likedSpotIds));
+        } catch (e) {
+            console.error('LocalStorage保存エラー:', e);
+        }
     }
 
 
@@ -197,17 +206,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const markers = {};
 
+    const defaultPinImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 24 24' fill='%23007aff'%3E%3Cpath d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'/%3E%3C/svg%3E";
+
     function createPhotoIcon(imageUrl) {
         return L.divIcon({
             className: 'custom-photo-pin',
-            html: `<div class="pin-bubble"><div class="pin-card"><img src="${imageUrl}" alt="pin"></div></div>`,
+            html: `<div class="pin-bubble"><div class="pin-card"><img src="${imageUrl || defaultPinImage}" alt="pin"></div></div>`,
             iconSize: [46, 56],
             iconAnchor: [23, 56]
         });
     }
 
     function addSpotToMap(spot) {
-        const latestImage = spot.images[spot.images.length - 1];
+        const latestImage = (spot.images && spot.images.length > 0)
+            ? spot.images[spot.images.length - 1]
+            : defaultPinImage;
         const customIcon = createPhotoIcon(latestImage);
         const marker = L.marker([spot.lat, spot.lng], { icon: customIcon }).addTo(map);
 
@@ -456,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function openModal(spot) {
         activeSpot = spot;
-        currentImageIndex = spot.images.length - 1;
+        currentImageIndex = (spot.images && spot.images.length > 0) ? spot.images.length - 1 : 0;
 
         const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='%238e8e93'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
         document.getElementById('modal-avatar').src = spot.avatar || defaultAvatar;
@@ -469,6 +482,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const tagsEl = document.getElementById('modal-tags');
         if (tagsEl) tagsEl.textContent = spot.tags || "";
+
+        // 閲覧モードを表示、編集モードを非表示
+        modalViewMode?.classList.remove('hidden');
+        modalEditMode?.classList.add('hidden');
+        editSpotBtn?.classList.remove('hidden');
+        deleteSpotBtn?.classList.remove('hidden');
 
         updateModalImageDisplay();
 
@@ -542,10 +561,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalImage = document.getElementById('modal-image');
         const modalDate = document.getElementById('modal-date');
         
-        modalImage.src = activeSpot.images[currentImageIndex];
-        const dateStr = (activeSpot.dates && activeSpot.dates[currentImageIndex]) ? activeSpot.dates[currentImageIndex] : "2026-08-01";
-        modalDate.textContent = `撮影日: ${dateStr} (${currentImageIndex + 1} / ${activeSpot.images.length}枚目)`;
-
         let sliderNav = document.getElementById('photo-slider-nav');
         if (!sliderNav) {
             sliderNav = document.createElement('div');
@@ -553,6 +568,17 @@ document.addEventListener('DOMContentLoaded', () => {
             sliderNav.style.cssText = `display: flex; justify-content: space-between; align-items: center; margin: 8px 0;`;
             modalImage.parentNode.insertBefore(sliderNav, modalImage.nextSibling);
         }
+
+        if (!activeSpot.images || activeSpot.images.length === 0) {
+            modalImage.src = defaultPinImage;
+            modalDate.textContent = '写真なし';
+            sliderNav.innerHTML = '';
+            return;
+        }
+
+        modalImage.src = activeSpot.images[currentImageIndex];
+        const dateStr = (activeSpot.dates && activeSpot.dates[currentImageIndex]) ? activeSpot.dates[currentImageIndex] : new Date().toISOString().split('T')[0];
+        modalDate.textContent = `撮影日: ${dateStr} (${currentImageIndex + 1} / ${activeSpot.images.length}枚目)`;
 
         if (activeSpot.images.length > 1) {
             sliderNav.innerHTML = `
@@ -595,15 +621,99 @@ document.addEventListener('DOMContentLoaded', () => {
         const index = likedSpotIds.indexOf(activeSpot.id);
         if (index === -1) {
             likedSpotIds.push(activeSpot.id);
-            activeSpot.likes++;
+            activeSpot.likes = (activeSpot.likes || 0) + 1;
         } else {
             likedSpotIds.splice(index, 1);
-            activeSpot.likes--;
+            activeSpot.likes = Math.max(0, (activeSpot.likes || 0) - 1);
         }
         saveLikedSpotsToStorage();
         saveSpotsToStorage();
         openModal(activeSpot);
     });
+
+    // コメント投稿
+    const commentForm = document.getElementById('comment-form');
+    const commentInput = document.getElementById('comment-input');
+    if (commentForm) {
+        commentForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!activeSpot || !commentInput) return;
+            const text = commentInput.value.trim();
+            if (!text) return;
+            if (!activeSpot.comments) activeSpot.comments = [];
+            activeSpot.comments.push({
+                text: text,
+                date: new Date().toISOString().split('T')[0]
+            });
+            saveSpotsToStorage();
+            renderComments(activeSpot.comments);
+            commentInput.value = '';
+        });
+    }
+
+    // スポット編集 & 削除
+    const editSpotBtn = document.getElementById('edit-spot-btn');
+    const deleteSpotBtn = document.getElementById('delete-spot-btn');
+    const modalViewMode = document.getElementById('modal-view-mode');
+    const modalEditMode = document.getElementById('modal-edit-mode');
+    const editTitleInput = document.getElementById('edit-title-input');
+    const editCaptionInput = document.getElementById('edit-caption-input');
+    const editTagsInput = document.getElementById('edit-tags-input');
+    const saveEditBtn = document.getElementById('save-edit-btn');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+
+    if (editSpotBtn) {
+        editSpotBtn.addEventListener('click', () => {
+            if (!activeSpot) return;
+            modalViewMode?.classList.add('hidden');
+            modalEditMode?.classList.remove('hidden');
+            if (editTitleInput) editTitleInput.value = activeSpot.title || "";
+            if (editCaptionInput) editCaptionInput.value = activeSpot.caption || "";
+            if (editTagsInput) editTagsInput.value = activeSpot.tags || "";
+        });
+    }
+
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', () => {
+            modalEditMode?.classList.add('hidden');
+            modalViewMode?.classList.remove('hidden');
+        });
+    }
+
+    if (saveEditBtn) {
+        saveEditBtn.addEventListener('click', () => {
+            if (!activeSpot) return;
+            const newTitle = editTitleInput?.value.trim();
+            if (!newTitle) {
+                alert('タイトルを入力してください。');
+                return;
+            }
+            activeSpot.title = newTitle;
+            activeSpot.caption = editCaptionInput?.value.trim() || "";
+            activeSpot.tags = editTagsInput?.value.trim() || "";
+
+            saveSpotsToStorage();
+            renderAllMarkers();
+            updateFilterBar();
+
+            modalEditMode?.classList.add('hidden');
+            modalViewMode?.classList.remove('hidden');
+            openModal(activeSpot);
+        });
+    }
+
+    if (deleteSpotBtn) {
+        deleteSpotBtn.addEventListener('click', () => {
+            if (!activeSpot) return;
+            if (confirm(`「${activeSpot.title}」を削除してもよろしいですか？`)) {
+                spots = spots.filter(s => s.id !== activeSpot.id);
+                saveSpotsToStorage();
+                renderAllMarkers();
+                updateFilterBar();
+                closeAllModals();
+            }
+        });
+    }
 
 
     // ==========================================
@@ -611,21 +721,71 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     const photoInput = document.getElementById('photo-input');
     const imagePreview = document.getElementById('image-preview');
+    const uploadArea = document.querySelector('.photo-upload-area');
+    const uploadHint = document.getElementById('upload-hint');
     let uploadedImageBase64 = "";
 
+    function compressImage(file, maxWidth = 1000, maxHeight = 1000, quality = 0.75) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width = Math.round((width * maxHeight) / height);
+                            height = maxHeight;
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    resolve(dataUrl);
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    if (uploadArea && photoInput) {
+        uploadArea.addEventListener('click', () => {
+            photoInput.click();
+        });
+    }
+
     if (photoInput) {
-        photoInput.addEventListener('change', (e) => {
+        photoInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = function (event) {
-                    uploadedImageBase64 = event.target.result;
+                try {
+                    uploadedImageBase64 = await compressImage(file);
                     if (imagePreview) {
                         imagePreview.src = uploadedImageBase64;
                         imagePreview.classList.remove('hidden');
                     }
-                };
-                reader.readAsDataURL(file);
+                    if (uploadHint) {
+                        uploadHint.classList.add('hidden');
+                    }
+                } catch (err) {
+                    console.error('画像読み込み・圧縮エラー:', err);
+                    alert('画像の読み込みに失敗しました。');
+                }
             }
         });
     }
@@ -681,11 +841,19 @@ document.addEventListener('DOMContentLoaded', () => {
             updateFilterBar();
 
             postForm.reset();
-            if (imagePreview) imagePreview.classList.add('hidden');
+            if (imagePreview) {
+                imagePreview.src = '';
+                imagePreview.classList.add('hidden');
+            }
+            if (uploadHint) {
+                uploadHint.classList.remove('hidden');
+            }
             uploadedImageBase64 = "";
+            photoInput.value = "";
 
             closeAllModals();
             map.setView([currentPosition.lat, currentPosition.lng], 16);
+            alert('スポットを投稿しました！');
         });
     }
 
