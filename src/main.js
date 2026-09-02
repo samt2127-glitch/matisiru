@@ -163,49 +163,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 3. 初期データ & LocalStorage 保存
     // ==========================================
-    const defaultSpots = [
-        {
-            id: "spot_local_1",
-            title: "信濃川沿いの夕暮れベンチ",
-            lat: 37.3115,
-            lng: 138.7985,
-            username: "ojiya_deep_fan",
-            avatar: "https://picsum.photos/id/1025/100/100",
-            images: [
-                "https://picsum.photos/id/1015/600/400",
-                "https://picsum.photos/id/1016/600/400"
-            ],
-            dates: ["2026-07-01", "2026-08-01"],
-            tags: "#秘密のベンチ #夕暮れ #散歩道 #小千谷",
-            likes: 12,
-            comments: [{ text: "ここ昔よく通ってました！", date: "2026-08-02" }]
-        },
-        {
-            id: "spot_local_2",
-            title: "錦鯉が泳ぐ池と静かな裏路地",
-            lat: 37.3182,
-            lng: 138.7912,
-            username: "local_walker",
-            avatar: "https://picsum.photos/id/1062/100/100",
-            images: [
-                "https://picsum.photos/id/1040/600/400"
-            ],
-            dates: ["2026-07-20"],
-            tags: "#裏路地 #昭和レトロ #小千谷",
-            likes: 8,
-            comments: []
-        }
-    ];
+    const defaultSpots = [];
 
     let rawSpots = JSON.parse(localStorage.getItem('ojiya_photo_spots')) || defaultSpots;
+    // 過去の初期ダミーデータ（spot_local_1, spot_local_2）が含まれていれば除外
+    rawSpots = rawSpots.filter(s => s.id !== "spot_local_1" && s.id !== "spot_local_2");
+
     let spots = rawSpots.map(s => {
         if (!s.images && s.image) {
             s.images = [s.image];
-            s.dates = [s.date || "2026-08-01"];
+            s.dates = [s.date || new Date().toISOString().split('T')[0]];
         }
         if (!s.images) {
-            s.images = ["https://picsum.photos/id/1015/600/400"];
-            s.dates = ["2026-08-01"];
+            s.images = [];
+            s.dates = [];
         }
         return s;
     });
@@ -487,10 +458,17 @@ document.addEventListener('DOMContentLoaded', () => {
         activeSpot = spot;
         currentImageIndex = spot.images.length - 1;
 
-        document.getElementById('modal-avatar').src = spot.avatar;
-        document.getElementById('modal-username').textContent = spot.username;
+        const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='%238e8e93'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+        document.getElementById('modal-avatar').src = spot.avatar || defaultAvatar;
+        document.getElementById('modal-username').textContent = spot.username || "ユーザー";
         document.getElementById('modal-title').textContent = spot.title;
-        document.getElementById('like-count').textContent = spot.likes;
+        document.getElementById('like-count').textContent = spot.likes || 0;
+
+        const captionEl = document.getElementById('modal-caption');
+        if (captionEl) captionEl.textContent = spot.caption || "";
+
+        const tagsEl = document.getElementById('modal-tags');
+        if (tagsEl) tagsEl.textContent = spot.tags || "";
 
         updateModalImageDisplay();
 
@@ -656,10 +634,19 @@ document.addEventListener('DOMContentLoaded', () => {
         postForm.addEventListener('submit', (e) => {
             e.preventDefault();
 
+            if (!uploadedImageBase64) {
+                alert('写真をアップロードしてください。');
+                return;
+            }
+
             const titleInput = document.getElementById('input-title');
             const title = titleInput ? titleInput.value.trim() : "無題のスポット";
+            const captionInput = document.getElementById('input-caption');
+            const caption = captionInput ? captionInput.value.trim() : "";
+            const tagsInput = document.getElementById('input-tags');
+            const tags = tagsInput ? tagsInput.value.trim() : "";
             const today = new Date().toISOString().split('T')[0];
-            const newImage = uploadedImageBase64 || "https://picsum.photos/id/1015/600/400";
+            const newImage = uploadedImageBase64;
 
             let existingSpot = spots.find(s => s.title === title);
 
@@ -668,17 +655,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!existingSpot.dates) existingSpot.dates = [];
                 existingSpot.images.push(newImage);
                 existingSpot.dates.push(today);
+                if (caption) existingSpot.caption = caption;
+                if (tags) existingSpot.tags = tags;
             } else {
+                const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='%238e8e93'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
                 const newSpot = {
                     id: `spot_local_${Date.now()}`,
                     title: title,
+                    caption: caption,
                     lat: currentPosition.lat,
                     lng: currentPosition.lng,
-                    username: "my_user",
-                    avatar: "https://picsum.photos/id/64/100/100",
+                    username: "ゲスト",
+                    avatar: defaultAvatar,
                     images: [newImage],
                     dates: [today],
-                    tags: "#小千谷",
+                    tags: tags || "#小千谷",
                     likes: 0,
                     comments: []
                 };
