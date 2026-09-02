@@ -1,5 +1,8 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import './style.css';
 
 // Leaflet のデフォルトマーカーアイコンのパス解決設定
@@ -202,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // ==========================================
-    // 4. マップ表示
+    // 4. マップ表示 (近接ピンの重なり防止・クラスタリング対応)
     // ==========================================
     const markers = {};
 
@@ -217,22 +220,51 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 近接したピンをまとめ、タップ・最大ズーム時に放射状（スパイダー状）に展開するグループ
+    const markerClusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 35,
+        spiderfyOnMaxZoom: true,
+        zoomToBoundsOnClick: true,
+        spiderfyDistanceMultiplier: 1.5,
+        iconCreateFunction: function (cluster) {
+            const count = cluster.getChildCount();
+            const childMarkers = cluster.getAllChildMarkers();
+            let photoUrl = defaultPinImage;
+            if (childMarkers.length > 0 && childMarkers[0].options && childMarkers[0].options.spotPhoto) {
+                photoUrl = childMarkers[0].options.spotPhoto;
+            }
+            return L.divIcon({
+                className: 'custom-photo-pin custom-cluster-pin',
+                html: `<div class="pin-bubble"><div class="pin-card cluster-card"><img src="${photoUrl}" alt="cluster"><span class="cluster-badge">${count}</span></div></div>`,
+                iconSize: [46, 56],
+                iconAnchor: [23, 56]
+            });
+        }
+    });
+    map.addLayer(markerClusterGroup);
+
     function addSpotToMap(spot) {
         const latestImage = (spot.images && spot.images.length > 0)
             ? spot.images[spot.images.length - 1]
             : defaultPinImage;
         const customIcon = createPhotoIcon(latestImage);
-        const marker = L.marker([spot.lat, spot.lng], { icon: customIcon }).addTo(map);
+        const marker = L.marker([spot.lat, spot.lng], {
+            icon: customIcon,
+            spotPhoto: latestImage
+        });
 
         marker.on('click', () => {
             openModal(spot);
         });
 
         markers[spot.id] = marker;
+        markerClusterGroup.addLayer(marker);
     }
 
     function renderAllMarkers() {
-        Object.keys(markers).forEach(id => map.removeLayer(markers[id]));
+        markerClusterGroup.clearLayers();
+        Object.keys(markers).forEach(id => delete markers[id]);
         spots.forEach(spot => addSpotToMap(spot));
     }
 
@@ -272,14 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
         currentFilterTag = tag;
         updateFilterBar();
 
+        markerClusterGroup.clearLayers();
         spots.forEach(spot => {
-            const marker = markers[spot.id];
-            if (!marker) return;
-
             if (tag === "すべて" || (spot.tags && spot.tags.includes(tag))) {
-                if (!map.hasLayer(marker)) map.addLayer(marker);
-            } else {
-                if (map.hasLayer(marker)) map.removeLayer(marker);
+                const marker = markers[spot.id];
+                if (marker) {
+                    markerClusterGroup.addLayer(marker);
+                }
             }
         });
     }

@@ -491,3 +491,37 @@ body {
     border-color: #ffffff transparent transparent transparent;
     filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2)); /* 三角に影をつける */
 }
+
+/* ==========================================================================
+   クラスターピン（近接写真のまとめ表示）
+   ========================================================================== */
+.pin-card.cluster-card {
+    border: 3px solid #ff9500 !important; /* クラスターはアクセントカラー（オレンジ）枠 */
+}
+
+.cluster-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background: #ff3b30;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+    z-index: 10;
+    border: 1.5px solid #ffffff;
+}
+
+/* Spiderfy展開時の線のスタイル */
+.leaflet-cluster-spider-leg {
+    stroke: rgba(0, 122, 255, 0.6) !important;
+    stroke-width: 2px !important;
+    stroke-dasharray: 4, 4;
+}
