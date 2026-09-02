@@ -220,11 +220,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 近接したピンをまとめ、タップ・最大ズーム時に放射状（スパイダー状）に展開するグループ
+    // 近接したピンをまとめ、拡大（ズームイン）時に個別の写真ピンに自動分離する設定
     const markerClusterGroup = L.markerClusterGroup({
         showCoverageOnHover: false,
-        maxClusterRadius: 35,
-        spiderfyOnMaxZoom: true,
+        maxClusterRadius: 30, // まとめる半径（小さめにしてズームですぐ分かれやすく）
+        disableClusteringAtZoom: 16, // ズームレベル16以上（拡大時）はクラスタを解除して個別ピンを表示！
+        spiderfyOnMaxZoom: true, // 同一地点ピンの展開
         zoomToBoundsOnClick: true,
         spiderfyDistanceMultiplier: 1.5,
         iconCreateFunction: function (cluster) {
