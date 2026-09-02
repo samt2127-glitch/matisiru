@@ -3,6 +3,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import exifr from 'exifr';
 import './style.css';
 
 // Leaflet のデフォルトマーカーアイコンのパス解決設定
@@ -23,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. 地図の初期化 (Leaflet + CARTO)
     // ==========================================
     let currentPosition = { lat: 37.3130, lng: 138.7950 };
+    let photoExifPosition = null; // 選択写真のEXIF GPS
+    let targetSpotForAddPhoto = null; // 「この場所で写真を追加」用の対象スポット
     const map = L.map('map').setView([currentPosition.lat, currentPosition.lng], 13);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -81,6 +84,17 @@ document.addEventListener('DOMContentLoaded', () => {
         radio.addEventListener('change', (e) => {
             if (e.target.value === 'nmea') {
                 if (nmeaInputBox) nmeaInputBox.classList.remove('hidden');
+            } else if (e.target.value === 'exif') {
+                if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
+                if (photoExifPosition) {
+                    currentPosition = { ...photoExifPosition };
+                    map.setView([currentPosition.lat, currentPosition.lng], 16);
+                } else {
+                    alert('現在選択されている写真にGPS位置情報（EXIF）が含まれていません。');
+                    const devRadio = document.querySelector('input[name="loc-mode"][value="device"]');
+                    if (devRadio) devRadio.checked = true;
+                    fetchDeviceLocation();
+                }
             } else {
                 if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
                 fetchDeviceLocation();
@@ -99,7 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 (err) => {
                     console.log('現在地取得失敗: ' + err.message);
-                }
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
             );
         }
     }
@@ -382,11 +397,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let r of radios) { if (r.checked) return r.value; }
                 return 'device';
             };
-            const modeLabel = getMode() === 'nmea' ? '🛰️ NMEA測位' : '📱 デバイス測位';
+            const mode = getMode();
+            const modeLabel = mode === 'nmea' ? '🛰️ NMEA測位' : mode === 'exif' ? '📷 写真の撮影位置 (EXIF)' : '📱 デバイス現在地';
             locBox.innerHTML = `
-                <strong>📍 記録される位置情報 (${modeLabel})</strong><br>
-                緯度: ${currentPosition.lat.toFixed(6)} / 経度: ${currentPosition.lng.toFixed(6)}
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                    <div>
+                        <strong>📍 記録される位置 (${modeLabel})</strong><br>
+                        緯度: ${currentPosition.lat.toFixed(6)} / 経度: ${currentPosition.lng.toFixed(6)}
+                    </div>
+                    <button type="button" id="refresh-gps-btn" style="background:#007aff; color:white; border:none; padding:5px 10px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;">🔄 現在地を再取得</button>
+                </div>
             `;
+            document.getElementById('refresh-gps-btn')?.addEventListener('click', () => {
+                const devRadio = document.querySelector('input[name="loc-mode"][value="device"]');
+                if (devRadio) devRadio.checked = true;
+                if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
+                fetchDeviceLocation();
+            });
         }
     }
 
@@ -429,6 +456,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bindClick('nav-post-btn', () => {
         closeAllModals();
+        targetSpotForAddPhoto = null; // 新規投稿モード
+        const modalTitle = document.getElementById('create-modal-title');
+        if (modalTitle) modalTitle.textContent = 'ディープスポットを投稿';
+
+        const titleInput = document.getElementById('input-title');
+        if (titleInput) {
+            titleInput.value = '';
+            titleInput.readOnly = false;
+            titleInput.style.backgroundColor = '';
+        }
+        const captionInput = document.getElementById('input-caption');
+        if (captionInput) captionInput.value = '';
+        const tagsInput = document.getElementById('input-tags');
+        if (tagsInput) tagsInput.value = '';
+
+        const devRadio = document.querySelector('input[name="loc-mode"][value="device"]');
+        if (devRadio) devRadio.checked = true;
+        if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
+
+        fetchDeviceLocation();
         updatePostLocationDisplay();
         if (createPostModal) createPostModal.classList.remove('hidden');
         document.getElementById('nav-post-btn')?.classList.add('active');
@@ -589,22 +636,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const shootHereBtn = document.getElementById('shoot-here-btn');
         if (shootHereBtn) {
             shootHereBtn.onclick = () => {
-                // 詳細モーダルだけを隠し、投稿モーダルを表示
+                targetSpotForAddPhoto = spot; // 既存スポット追加モード
                 if (postModal) postModal.classList.add('hidden');
                 if (createPostModal) createPostModal.classList.remove('hidden');
                 
                 document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
                 document.getElementById('nav-post-btn')?.classList.add('active');
 
+                const modalTitle = document.getElementById('create-modal-title');
+                if (modalTitle) modalTitle.textContent = `「${spot.title}」に写真を追加`;
+
                 // 座標をこのスポットのものに固定
                 currentPosition = { lat: spot.lat, lng: spot.lng };
                 updatePostLocationDisplay();
 
-                // タイトルを自動で引き継ぐ
+                // タイトルを引き継ぎ、編集不可にして明示
                 const titleInput = document.getElementById('input-title');
                 if (titleInput) {
                     titleInput.value = spot.title;
+                    titleInput.readOnly = true;
+                    titleInput.style.backgroundColor = '#f2f2f7';
                 }
+                const captionInput = document.getElementById('input-caption');
+                if (captionInput) captionInput.value = '';
+                const tagsInput = document.getElementById('input-tags');
+                if (tagsInput) tagsInput.value = spot.tags || '';
             };
         }
 
@@ -839,6 +895,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (uploadHint) {
                         uploadHint.classList.add('hidden');
                     }
+
+                    // 写真に位置情報（EXIF GPS）が含まれているか解析
+                    if (!targetSpotForAddPhoto) {
+                        try {
+                            const gps = await exifr.gps(file);
+                            if (gps && gps.latitude && gps.longitude) {
+                                photoExifPosition = { lat: gps.latitude, lng: gps.longitude };
+                                currentPosition = { ...photoExifPosition };
+                                const exifRadio = document.querySelector('input[name="loc-mode"][value="exif"]');
+                                if (exifRadio) exifRadio.checked = true;
+                                if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
+                                map.setView([currentPosition.lat, currentPosition.lng], 16);
+                                updatePostLocationDisplay();
+                            } else {
+                                photoExifPosition = null;
+                            }
+                        } catch (exifErr) {
+                            console.log('EXIF取得スキップ:', exifErr);
+                            photoExifPosition = null;
+                        }
+                    }
                 } catch (err) {
                     console.error('画像読み込み・圧縮エラー:', err);
                     alert('画像の読み込みに失敗しました。');
@@ -865,19 +942,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const today = new Date().toISOString().split('T')[0];
             const newImage = uploadedImageBase64;
 
-            let existingSpot = spots.find(s => s.title === title);
-
-            if (existingSpot) {
-                if (!existingSpot.images) existingSpot.images = [];
-                if (!existingSpot.dates) existingSpot.dates = [];
-                existingSpot.images.push(newImage);
-                existingSpot.dates.push(today);
-                if (caption) existingSpot.caption = caption;
-                if (tags) existingSpot.tags = tags;
+            if (targetSpotForAddPhoto) {
+                // 明示的に「この場所で写真を追加」から来た場合のみ同一スポットに追加
+                const existingSpot = spots.find(s => s.id === targetSpotForAddPhoto.id);
+                if (existingSpot) {
+                    if (!existingSpot.images) existingSpot.images = [];
+                    if (!existingSpot.dates) existingSpot.dates = [];
+                    existingSpot.images.push(newImage);
+                    existingSpot.dates.push(today);
+                    if (caption) existingSpot.caption = caption;
+                    if (tags) existingSpot.tags = tags;
+                }
             } else {
+                // 通常の新規投稿：同名タイトルでも常に独立した新規スポットとして作成！
                 const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='%238e8e93'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
                 const newSpot = {
-                    id: `spot_local_${Date.now()}`,
+                    id: `spot_local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
                     title: title,
                     caption: caption,
                     lat: currentPosition.lat,
@@ -907,6 +987,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             uploadedImageBase64 = "";
             photoInput.value = "";
+            targetSpotForAddPhoto = null;
+            photoExifPosition = null;
 
             closeAllModals();
             map.setView([currentPosition.lat, currentPosition.lng], 16);

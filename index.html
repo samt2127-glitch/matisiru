@@ -35,7 +35,7 @@
     <div id="create-post-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>ディープスポットを投稿</h2>
+                <h2 id="create-modal-title">ディープスポットを投稿</h2>
                 <button id="close-create-modal" class="close-btn">&times;</button>
             </div>
             <form id="post-form">
@@ -66,9 +66,10 @@
                 <!-- 位置情報の取得方法選択 -->
                 <div class="form-group">
                     <label>位置情報の取得方法</label>
-                    <div style="display: flex; gap: 15px; margin-top: 5px; font-size: 14px;">
-                        <label><input type="radio" name="loc-mode" value="device" checked> スマホ/PCの現在地</label>
-                        <label><input type="radio" name="loc-mode" value="nmea"> NMEA / QZ1 連携</label>
+                    <div style="display: flex; gap: 12px; margin-top: 5px; font-size: 13px; flex-wrap: wrap;">
+                        <label><input type="radio" name="loc-mode" value="device" checked> 📱 現在地</label>
+                        <label><input type="radio" name="loc-mode" value="exif"> 📷 写真の撮影位置</label>
+                        <label><input type="radio" name="loc-mode" value="nmea"> 🛰️ NMEA/QZ1</label>
                     </div>
                 </div>
             
