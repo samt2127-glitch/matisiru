@@ -245,12 +245,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     map.addLayer(markerClusterGroup);
 
+    // 同一または極めて近い座標のスポットが重なって隠れるのを防ぐオフセット計算
+    function getAdjustedLatLng(spot) {
+        const sameLocSpots = spots.filter(s =>
+            Math.abs(s.lat - spot.lat) < 0.00008 && Math.abs(s.lng - spot.lng) < 0.00008
+        );
+
+        if (sameLocSpots.length <= 1) {
+            return [spot.lat, spot.lng];
+        }
+
+        const index = sameLocSpots.findIndex(s => s.id === spot.id);
+        if (index === -1) return [spot.lat, spot.lng];
+
+        // 円周状にわずかに分散配置（約8mずらす）
+        const angle = (2 * Math.PI / sameLocSpots.length) * index;
+        const radiusLat = 0.00008;
+        const radiusLng = 0.00010;
+
+        const adjustedLat = spot.lat + (radiusLat * Math.sin(angle));
+        const adjustedLng = spot.lng + (radiusLng * Math.cos(angle));
+
+        return [adjustedLat, adjustedLng];
+    }
+
     function addSpotToMap(spot) {
         const latestImage = (spot.images && spot.images.length > 0)
             ? spot.images[spot.images.length - 1]
             : defaultPinImage;
         const customIcon = createPhotoIcon(latestImage);
-        const marker = L.marker([spot.lat, spot.lng], {
+        const [displayLat, displayLng] = getAdjustedLatLng(spot);
+        const marker = L.marker([displayLat, displayLng], {
             icon: customIcon,
             spotPhoto: latestImage
         });
