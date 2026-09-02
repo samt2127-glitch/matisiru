@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小千谷ディープフォトマップ</title>
+</head>
+<body>
+
+    <!-- タグフィルターバー -->
+    <div id="filter-bar" class="filter-bar">
+        <!-- JSで動的にタグチップを生成 -->
+    </div>
+
+    <!-- 地図エリア -->
+    <main id="map"></main>
+
+    <!-- 検索モーダル -->
+    <div id="search-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>スポット検索</h2>
+                <button id="close-search-modal" class="close-btn">&times;</button>
+            </div>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="キーワードやタグ（#へぎそば 等）で検索...">
+            </div>
+            <div id="search-results-list" class="results-list">
+                <!-- 検索結果がここに表示される -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 投稿作成モーダル -->
+    <div id="create-post-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>ディープスポットを投稿</h2>
+                <button id="close-create-modal" class="close-btn">&times;</button>
+            </div>
+            <form id="post-form">
+                <div class="form-group">
+                    <label>写真を選択</label>
+                    <div class="photo-upload-area" onclick="document.getElementById('photo-input').click()">
+                        <span id="upload-hint">📷 タップして写真をアップロード</span>
+                        <img id="image-preview" class="hidden" alt="プレビュー">
+                    </div>
+                    <input type="file" id="photo-input" accept="image/*" class="hidden">
+                </div>
+
+                <div class="form-group">
+                    <label for="input-title">スポット名</label>
+                    <input type="text" id="input-title" placeholder="例: 本町の隠れた路地" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="input-caption">キャプション（説明）</label>
+                    <textarea id="input-caption" rows="3" placeholder="スポットの魅力や思い出を書いてね..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="input-tags">ハッシュタグ</label>
+                    <input type="text" id="input-tags" placeholder="#裏路地 #昭和レトロ 等">
+                </div>
+
+                <!-- 位置情報の取得方法選択 -->
+                <div class="form-group">
+                    <label>位置情報の取得方法</label>
+                    <div style="display: flex; gap: 15px; margin-top: 5px; font-size: 14px;">
+                        <label><input type="radio" name="loc-mode" value="device" checked> スマホ/PCの現在地</label>
+                        <label><input type="radio" name="loc-mode" value="nmea"> NMEA / QZ1 連携</label>
+                    </div>
+                </div>
+            
+                <!-- NMEA / Serial 入力・接続エリア -->
+                <div id="nmea-input-box" class="form-group nmea-box hidden">
+                    <button type="button" id="connect-serial-btn" class="serial-btn">🔌 QZ1 (シリアル機器) に接続</button>
+                    <label style="font-size: 11px; color: #666; margin-top: 6px; display: block;">手動 NMEA センテンス入力:</label>
+                    <textarea id="nmea-text" rows="2" placeholder="$GPRMC,072700.00,A,3718.9183,N,13847.5650,E..."></textarea>
+                    <button type="button" id="apply-nmea-btn" class="sub-btn" style="margin-top: 6px;">NMEA座標を適用</button>
+                </div>
+
+                <!-- JSで現在地座標が動的表示されるエリア -->
+
+                <button type="submit" class="submit-btn">投稿する</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 投稿詳細モーダル -->
+    <div id="post-modal" class="modal-overlay hidden">
+        <div class="modal-content post-detail">
+            <button id="close-modal" class="close-btn corner-close">&times;</button>
+            
+            <!-- 閲覧モード -->
+            <div id="modal-view-mode">
+                <div class="post-header-user">
+                    <img id="modal-avatar" src="" alt="avatar">
+                    <div>
+                        <div id="modal-username" class="username"></div>
+                        <div id="modal-date" class="date"></div>
+                    </div>
+                    <div class="owner-actions">
+                        <button id="edit-spot-btn" class="icon-btn hidden" title="編集">✏️</button>
+                        <button id="delete-spot-btn" class="icon-btn danger hidden" title="削除">🗑️</button>
+                    </div>
+                </div>
+
+                <h2 id="modal-title" class="post-title"></h2>
+                
+                <div class="post-image-container">
+                    <img id="modal-image" src="" alt="spot">
+                </div>
+
+                <div class="post-actions">
+                    <button id="like-btn" class="like-btn">♥ <span id="like-count">0</span> いいね！</button>
+                </div>
+
+                <p id="modal-caption" class="post-caption"></p>
+                <div id="modal-tags" class="post-tags"></div>
+
+                <div class="comments-section">
+                    <h3>コメント</h3>
+                    <div id="comments-list" class="comments-list"></div>
+                    <form id="comment-form" class="comment-form">
+                        <input type="text" id="comment-input" placeholder="コメントを入力..." required>
+                        <button type="submit">送信</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 編集モード -->
+            <div id="modal-edit-mode" class="hidden">
+                <h2>投稿を編集</h2>
+                <div class="form-group">
+                    <label>タイトル</label>
+                    <input type="text" id="edit-title-input">
+                </div>
+                <div class="form-group">
+                    <label>キャプション</label>
+                    <textarea id="edit-caption-input" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>ハッシュタグ</label>
+                    <input type="text" id="edit-tags-input">
+                </div>
+                <div class="edit-actions">
+                    <button id="save-edit-btn" class="submit-btn">保存</button>
+                    <button id="cancel-edit-btn" class="sub-btn">キャンセル</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ランキングモーダル -->
+    <div id="ranking-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🏆 人気スポットランキング</h2>
+                <button id="close-ranking-modal" class="close-btn">&times;</button>
+            </div>
+            <div id="ranking-list" class="results-list">
+                <!-- ランキング結果がここに表示される -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ボトムナビゲーション -->
+    <nav class="bottom-nav">
+        <button id="nav-map-btn" class="nav-item active">
+            <span class="nav-icon">🗺️</span>
+            <span class="nav-label">マップ</span>
+        </button>
+        <button id="nav-search-btn" class="nav-item">
+            <span class="nav-icon">🔍</span>
+            <span class="nav-label">検索</span>
+        </button>
+        <button id="nav-post-btn" class="nav-item">
+            <span class="nav-icon">➕</span>
+            <span class="nav-label">投稿</span>
+        </button>
+        <button id="nav-ranking-btn" class="nav-item">
+            <span class="nav-icon">🏆</span>
+            <span class="nav-label">ランキング</span>
+        </button>
+    </nav>
+
+    <!-- Vite エントリーポイント -->
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
