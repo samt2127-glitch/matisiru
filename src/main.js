@@ -3,7 +3,6 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import exifr from 'exifr';
 import './style.css';
 
 // Leaflet のデフォルトマーカーアイコンのパス解決設定
@@ -24,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. 地図の初期化 (Leaflet + CARTO)
     // ==========================================
     let currentPosition = { lat: 37.3130, lng: 138.7950 };
-    let photoExifPosition = null; // 選択写真のEXIF GPS
     let targetSpotForAddPhoto = null; // 「この場所で写真を追加」用の対象スポット
     const map = L.map('map').setView([currentPosition.lat, currentPosition.lng], 13);
 
@@ -84,17 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
         radio.addEventListener('change', (e) => {
             if (e.target.value === 'nmea') {
                 if (nmeaInputBox) nmeaInputBox.classList.remove('hidden');
-            } else if (e.target.value === 'exif') {
-                if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
-                if (photoExifPosition) {
-                    currentPosition = { ...photoExifPosition };
-                    map.setView([currentPosition.lat, currentPosition.lng], 16);
-                } else {
-                    alert('現在選択されている写真にGPS位置情報（EXIF）が含まれていません。');
-                    const devRadio = document.querySelector('input[name="loc-mode"][value="device"]');
-                    if (devRadio) devRadio.checked = true;
-                    fetchDeviceLocation();
-                }
             } else {
                 if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
                 fetchDeviceLocation();
@@ -398,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return 'device';
             };
             const mode = getMode();
-            const modeLabel = mode === 'nmea' ? '🛰️ NMEA測位' : mode === 'exif' ? '📷 写真の撮影位置 (EXIF)' : '📱 デバイス現在地';
+            const modeLabel = mode === 'nmea' ? '🛰️ NMEA測位' : '📱 デバイス現在地';
             locBox.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                     <div>
@@ -895,27 +882,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (uploadHint) {
                         uploadHint.classList.add('hidden');
                     }
-
-                    // 写真に位置情報（EXIF GPS）が含まれているか解析
-                    if (!targetSpotForAddPhoto) {
-                        try {
-                            const gps = await exifr.gps(file);
-                            if (gps && gps.latitude && gps.longitude) {
-                                photoExifPosition = { lat: gps.latitude, lng: gps.longitude };
-                                currentPosition = { ...photoExifPosition };
-                                const exifRadio = document.querySelector('input[name="loc-mode"][value="exif"]');
-                                if (exifRadio) exifRadio.checked = true;
-                                if (nmeaInputBox) nmeaInputBox.classList.add('hidden');
-                                map.setView([currentPosition.lat, currentPosition.lng], 16);
-                                updatePostLocationDisplay();
-                            } else {
-                                photoExifPosition = null;
-                            }
-                        } catch (exifErr) {
-                            console.log('EXIF取得スキップ:', exifErr);
-                            photoExifPosition = null;
-                        }
-                    }
                 } catch (err) {
                     console.error('画像読み込み・圧縮エラー:', err);
                     alert('画像の読み込みに失敗しました。');
@@ -988,7 +954,6 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadedImageBase64 = "";
             photoInput.value = "";
             targetSpotForAddPhoto = null;
-            photoExifPosition = null;
 
             closeAllModals();
             map.setView([currentPosition.lat, currentPosition.lng], 16);
