@@ -19,18 +19,18 @@ L.Icon.Default.mergeOptions({
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // ==========================================
-    // 1. 地図の初期化 (Leaflet + CARTO)
+// ==========================================
+    // 1. 地図の初期化 (確実に表示されるOpenStreetMap ＋ 文字非表示)
     // ==========================================
     let currentPosition = { lat: 37.3130, lng: 138.7950 };
     let targetSpotForAddPhoto = null; // 「この場所で写真を追加」用の対象スポット
-    const map = L.map('map').setView([currentPosition.lat, currentPosition.lng], 13);
+    const map = L.map('map', {
+        attributionControl: false // ここで右下のクレジット文字を綺麗に消す
+    }).setView([currentPosition.lat, currentPosition.lng], 13);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CARTO',
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19
     }).addTo(map);
-
 
     // ==========================================
     // 2. NMEA解析ロジック & シリアル・位置情報切替
